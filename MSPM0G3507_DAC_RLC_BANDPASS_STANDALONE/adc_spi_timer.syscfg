@@ -1,0 +1,206 @@
+/**
+ * LP-MSPM0G3507 ADC + software SPI + dual timer demo.
+ */
+//@cliArgs --device "MSPM0G350X" --package "LQFP-64(PM)" --part "Default"
+//@v2CliArgs --device "MSPM0G3507" --package "LQFP-64(PM)"
+// @cliArgs --board /ti/boards/LP_MSPM0G3507 --rtos nortos
+
+const Board  = scripting.addModule("/ti/driverlib/Board", {}, false);
+const SYSCTL = scripting.addModule("/ti/driverlib/SYSCTL");
+const ADC12  = scripting.addModule("/ti/driverlib/ADC12", {}, false);
+const DAC12  = scripting.addModule("/ti/driverlib/DAC12");
+const GPIO   = scripting.addModule("/ti/driverlib/GPIO", {}, false);
+const TIMER  = scripting.addModule("/ti/driverlib/TIMER", {}, false);
+const UART   = scripting.addModule("/ti/driverlib/UART", {}, false);
+
+const ADC121 = ADC12.addInstance();
+const GPIO1  = GPIO.addInstance();
+const GPIO2  = GPIO.addInstance();
+const GPIO3  = GPIO.addInstance();
+const GPIO4  = GPIO.addInstance();
+const GPIO5  = GPIO.addInstance();
+const GPIO6  = GPIO.addInstance();
+const TIMER1 = TIMER.addInstance();
+const TIMER2 = TIMER.addInstance();
+const TIMER3 = TIMER.addInstance();
+const UART1  = UART.addInstance();
+const UART2  = UART.addInstance();
+
+SYSCTL.forceDefaultClkConfig = true;
+SYSCTL.clockTreeEn           = true;
+
+/* 1 MSPS sample timer drives a 20-sample, 50 kHz waveform through DMA. */
+const mfpclkGate = system.clockTree["MFPCLKGATE"];
+mfpclkGate.enable = true;
+SYSCTL.MFPCLKEn              = true;
+
+DAC12.dacConfigureDMA       = true;
+DAC12.dacFIFOEn             = true;
+DAC12.dacFIFOThresh         = "TWO_QTRS_EMPTY";
+DAC12.dacEnabledInterrupts  = ["DMA_DONE"];
+DAC12.dacOutputPinEn        = true;
+DAC12.dacAmplifier          = "ON";
+DAC12.dacSampleTimerRate    = "1M";
+DAC12.DMA_CHANNEL.$name     = "DMA_CH1";
+DAC12.DMA_CHANNEL.transferMode = "FULL_CH_REPEAT_SINGLE";
+DAC12.DMA_CHANNEL.addressMode  = "b2f";
+DAC12.DMA_CHANNEL.srcLength    = "HALF_WORD";
+DAC12.DMA_CHANNEL.dstLength    = "HALF_WORD";
+DAC12.DMA_CHANNEL.peripheral.$assign = "DMA_CH1";
+
+ADC121.$name                      = "ADC12_0";
+ADC121.sampClkSrc                 = "DL_ADC12_CLOCK_ULPCLK";
+ADC121.sampClkDiv                 = "DL_ADC12_CLOCK_DIVIDE_1";
+ADC121.repeatMode                 = true;
+ADC121.trigSrc                    = "DL_ADC12_TRIG_SRC_EVENT";
+ADC121.adcMem0trig                = "DL_ADC12_TRIGGER_MODE_TRIGGER_NEXT";
+ADC121.subChanID                  = 3;
+ADC121.adcMem0chansel             = "DL_ADC12_INPUT_CHAN_2";
+ADC121.sampleTime0                = "62.5 ns";
+ADC121.enableFIFO                 = true;
+ADC121.configureDMA               = true;
+ADC121.sampCnt                    = 6;
+ADC121.enabledDMATriggers         = ["DL_ADC12_DMA_MEM10_RESULT_LOADED"];
+ADC121.enabledInterrupts          = ["DL_ADC12_INTERRUPT_DMA_DONE"];
+ADC121.powerDownMode              = "DL_ADC12_POWER_DOWN_MODE_MANUAL";
+ADC121.peripheral.$assign         = "ADC0";
+ADC121.peripheral.adcPin2.$assign = "PA25";
+ADC121.DMA_CHANNEL.$name          = "DMA_CH0";
+ADC121.DMA_CHANNEL.addressMode    = "f2b";
+ADC121.DMA_CHANNEL.peripheral.$assign = "DMA_CH0";
+
+GPIO1.$name                          = "GPIO_STATUS";
+GPIO1.associatedPins[0].$name        = "LED";
+GPIO1.associatedPins[0].assignedPort = "PORTA";
+GPIO1.associatedPins[0].assignedPin  = "0";
+GPIO1.associatedPins[0].initialValue = "SET";
+
+GPIO2.$name                                = "GPIO_SOFT_SPI";
+GPIO2.associatedPins.create(4);
+GPIO2.associatedPins[0].$name              = "SCLK";
+GPIO2.associatedPins[0].assignedPort       = "PORTA";
+GPIO2.associatedPins[0].assignedPin        = "8";
+GPIO2.associatedPins[0].initialValue       = "CLEARED";
+GPIO2.associatedPins[1].$name              = "MOSI";
+GPIO2.associatedPins[1].assignedPort       = "PORTA";
+GPIO2.associatedPins[1].assignedPin        = "9";
+GPIO2.associatedPins[1].initialValue       = "CLEARED";
+GPIO2.associatedPins[2].$name              = "MISO";
+GPIO2.associatedPins[2].assignedPort       = "PORTA";
+GPIO2.associatedPins[2].assignedPin        = "12";
+GPIO2.associatedPins[2].direction          = "INPUT";
+GPIO2.associatedPins[2].internalResistor   = "PULL_DOWN";
+GPIO2.associatedPins[3].$name              = "AD9959_CS";
+GPIO2.associatedPins[3].assignedPort       = "PORTA";
+GPIO2.associatedPins[3].assignedPin        = "13";
+GPIO2.associatedPins[3].initialValue       = "SET";
+
+GPIO3.$name                                = "GPIO_AD9959_CTRL";
+GPIO3.associatedPins.create(7);
+GPIO3.associatedPins[0].$name              = "IO_UPDATE";
+GPIO3.associatedPins[0].assignedPort       = "PORTB";
+GPIO3.associatedPins[0].assignedPin        = "0";
+GPIO3.associatedPins[0].initialValue       = "CLEARED";
+GPIO3.associatedPins[1].$name              = "RESET";
+GPIO3.associatedPins[1].assignedPort       = "PORTB";
+GPIO3.associatedPins[1].assignedPin        = "1";
+GPIO3.associatedPins[1].initialValue       = "CLEARED";
+GPIO3.associatedPins[2].$name              = "PWR_D";
+GPIO3.associatedPins[2].assignedPort       = "PORTB";
+GPIO3.associatedPins[2].assignedPin        = "2";
+GPIO3.associatedPins[2].initialValue       = "CLEARED";
+GPIO3.associatedPins[3].$name              = "P0";
+GPIO3.associatedPins[3].assignedPort       = "PORTB";
+GPIO3.associatedPins[3].assignedPin        = "3";
+GPIO3.associatedPins[3].initialValue       = "CLEARED";
+GPIO3.associatedPins[4].$name              = "P1";
+GPIO3.associatedPins[4].assignedPort       = "PORTB";
+GPIO3.associatedPins[4].assignedPin        = "4";
+GPIO3.associatedPins[4].initialValue       = "CLEARED";
+GPIO3.associatedPins[5].$name              = "P2";
+GPIO3.associatedPins[5].assignedPort       = "PORTB";
+GPIO3.associatedPins[5].assignedPin        = "7";
+GPIO3.associatedPins[5].initialValue       = "CLEARED";
+GPIO3.associatedPins[6].$name              = "P3";
+GPIO3.associatedPins[6].assignedPort       = "PORTB";
+GPIO3.associatedPins[6].assignedPin        = "6";
+GPIO3.associatedPins[6].initialValue       = "CLEARED";
+
+GPIO4.$name                                = "GPIO_AD9833_CTRL";
+GPIO4.associatedPins.create(2);
+GPIO4.associatedPins[0].$name              = "CS1";
+GPIO4.associatedPins[0].assignedPort       = "PORTB";
+GPIO4.associatedPins[0].assignedPin        = "8";
+GPIO4.associatedPins[0].initialValue       = "SET";
+GPIO4.associatedPins[1].$name              = "CS2";
+GPIO4.associatedPins[1].assignedPort       = "PORTB";
+GPIO4.associatedPins[1].assignedPin        = "9";
+GPIO4.associatedPins[1].initialValue       = "SET";
+
+GPIO6.$name                                = "GPIO_ADS1220_CTRL";
+GPIO6.associatedPins.create(1);
+GPIO6.associatedPins[0].$name              = "ADS1220_CS";
+GPIO6.associatedPins[0].assignedPort       = "PORTB";
+GPIO6.associatedPins[0].assignedPin        = "5";
+GPIO6.associatedPins[0].initialValue       = "SET";
+
+GPIO5.$name                                = "GPIO_UI";
+GPIO5.associatedPins.create(2);
+GPIO5.associatedPins[0].$name              = "KEY";
+GPIO5.associatedPins[0].assignedPort       = "PORTB";
+GPIO5.associatedPins[0].assignedPin        = "10";
+GPIO5.associatedPins[0].direction          = "INPUT";
+GPIO5.associatedPins[0].internalResistor   = "PULL_UP";
+GPIO5.associatedPins[1].$name              = "BUZZER";
+GPIO5.associatedPins[1].assignedPort       = "PORTB";
+GPIO5.associatedPins[1].assignedPin        = "11";
+GPIO5.associatedPins[1].initialValue       = "CLEARED";
+
+TIMER1.$name              = "TIMER_0";
+TIMER1.timerMode          = "PERIODIC";
+TIMER1.timerPeriod        = "1 ms";
+TIMER1.interrupts         = ["ZERO"];
+TIMER1.timerClkPrescale   = 31;
+TIMER1.peripheral.$assign = "TIMG0";
+
+TIMER2.$name              = "TIMER_1";
+TIMER2.timerMode          = "PERIODIC";
+TIMER2.timerPeriod        = "10 ms";
+TIMER2.interrupts         = ["ZERO"];
+TIMER2.timerClkPrescale   = 31;
+TIMER2.peripheral.$assign = "TIMG7";
+
+TIMER3.$name                       = "ADC_SAMPLE_TIMER";
+TIMER3.timerMode                   = "PERIODIC";
+TIMER3.timerPeriod                 = "5 us";
+TIMER3.timerClkPrescale            = 1;
+TIMER3.event1PublisherChannel      = 3;
+TIMER3.event1ControllerInterruptEn = ["ZERO_EVENT"];
+TIMER3.timerStartTimer             = false;
+TIMER3.peripheral.$assign          = "TIMG6";
+
+UART1.$name                    = "UART_0";
+UART1.enableFIFO               = true;
+UART1.enableDMARX              = false;
+UART1.enableDMATX              = false;
+UART1.enabledInterrupts        = ["RX"];
+UART1.rxFifoThreshold          = "DL_UART_RX_FIFO_LEVEL_ONE_ENTRY";
+UART1.txFifoThreshold          = "DL_UART_TX_FIFO_LEVEL_ONE_ENTRY";
+UART1.targetBaudRate           = 115200;
+UART1.enableInternalLoopback   = false;
+UART1.peripheral.$assign       = "UART0";
+UART1.peripheral.txPin.$assign = "PA10";
+UART1.peripheral.rxPin.$assign = "PA11";
+
+UART2.$name                    = "UART_SCREEN";
+UART2.enableFIFO               = true;
+UART2.enableDMARX              = false;
+UART2.enableDMATX              = false;
+UART2.enabledInterrupts        = ["RX"];
+UART2.rxFifoThreshold          = "DL_UART_RX_FIFO_LEVEL_ONE_ENTRY";
+UART2.txFifoThreshold          = "DL_UART_TX_FIFO_LEVEL_ONE_ENTRY";
+UART2.targetBaudRate           = 115200;
+UART2.enableInternalLoopback   = false;
+UART2.peripheral.$assign       = "UART3";
+UART2.peripheral.txPin.$assign = "PB12";
+UART2.peripheral.rxPin.$assign = "PB13";

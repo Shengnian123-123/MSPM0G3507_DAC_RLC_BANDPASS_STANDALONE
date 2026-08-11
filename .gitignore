@@ -1,0 +1,25 @@
+# Keil/uVision user settings and generated build output
+**/*.uvoptx
+**/*.uvguix*
+**/Objects/
+**/Listings/
+**/Debug/
+**/Release/
+**/*.o
+**/*.d
+**/*.axf
+**/*.hex
+**/*.map
+**/*.lnp
+**/*.dep
+**/*.htm
+**/*.log
+
+# Temporary exports and local files
+**/tmp/
+*.bak
+*.tmp
+*.scvd
+*.suo
+Thumbs.db
+Desktop.ini
